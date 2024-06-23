@@ -210,6 +210,8 @@ fn main_entry() -> Result<(), String> {
     );
 
     let behemoth_damage = Mutex::new(BehemothDamage::new()?);
+    // enable at start
+    behemoth_damage.lock().unwrap().enable()?;
 
     // user input
     mhw_toolkit::game::hooks::InputDispatchHook::new()
