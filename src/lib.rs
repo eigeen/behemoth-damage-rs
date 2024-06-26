@@ -11,6 +11,7 @@ use mhw_toolkit::{
     },
     game_util::{self, SystemMessageColor},
 };
+use once_cell::sync::Lazy;
 use windows::Win32::{
     Foundation::{BOOL, TRUE},
     System::{
@@ -33,6 +34,8 @@ mod logger {
 }
 
 static MAIN_THREAD_ONCE: Once = Once::new();
+static mut INPUT_HOOK: Lazy<mhw_toolkit::game::hooks::InputDispatchHook> =
+    Lazy::new(mhw_toolkit::game::hooks::InputDispatchHook::new);
 
 // .text:0000000141CC51B0 48 83 EC 68                                sub     rsp, 68h
 // .text:0000000141CC51B4 83 B9 80 22 01 00 0F                       cmp     dword ptr [rcx+12280h], 0Fh
@@ -214,46 +217,48 @@ fn main_entry() -> Result<(), String> {
     behemoth_damage.lock().unwrap().enable()?;
 
     // user input
-    mhw_toolkit::game::hooks::InputDispatchHook::new()
-        .set_hook(CallbackPosition::Before, move |input| {
-            if !input.starts_with("/behemoth") {
-                return;
-            }
+    unsafe {
+        INPUT_HOOK
+            .set_hook(CallbackPosition::Before, move |input| {
+                if !input.starts_with("/behemoth") {
+                    return;
+                }
 
-            let args = input.split_whitespace().collect::<Vec<_>>();
-            if args.len() == 1 {
-                let mut _behemoth_damage = behemoth_damage.lock().unwrap();
-                if let Err(e) = _behemoth_damage.switch() {
-                    error!("Failed to switch behemoth damage mode: {}", e);
-                } else if _behemoth_damage.enabled {
-                    show_primary_info_msg("Behemoth damage mode on");
-                } else {
-                    show_primary_info_msg("Behemoth damage mode off");
-                }
-            } else if args.len() >= 2 {
-                let cmd = args[1];
-                match cmd {
-                    "on" | "enable" => {
-                        if let Err(e) = behemoth_damage.lock().unwrap().enable() {
-                            error!("Failed to enable behemoth damage mode: {}", e);
-                        } else {
-                            show_primary_info_msg("Behemoth damage mode on");
+                let args = input.split_whitespace().collect::<Vec<_>>();
+                if args.len() == 1 {
+                    let mut _behemoth_damage = behemoth_damage.lock().unwrap();
+                    if let Err(e) = _behemoth_damage.switch() {
+                        error!("Failed to switch behemoth damage mode: {}", e);
+                    } else if _behemoth_damage.enabled {
+                        show_primary_info_msg("Behemoth damage mode on");
+                    } else {
+                        show_primary_info_msg("Behemoth damage mode off");
+                    }
+                } else if args.len() >= 2 {
+                    let cmd = args[1];
+                    match cmd {
+                        "on" | "enable" => {
+                            if let Err(e) = behemoth_damage.lock().unwrap().enable() {
+                                error!("Failed to enable behemoth damage mode: {}", e);
+                            } else {
+                                show_primary_info_msg("Behemoth damage mode on");
+                            }
+                        }
+                        "off" | "disable" => {
+                            if let Err(e) = behemoth_damage.lock().unwrap().disable() {
+                                error!("Failed to disable behemoth damage mode: {}", e);
+                            } else {
+                                show_primary_info_msg("Behemoth damage mode off");
+                            }
+                        }
+                        _ => {
+                            error!("Invalid command: {}", cmd);
                         }
                     }
-                    "off" | "disable" => {
-                        if let Err(e) = behemoth_damage.lock().unwrap().disable() {
-                            error!("Failed to disable behemoth damage mode: {}", e);
-                        } else {
-                            show_primary_info_msg("Behemoth damage mode off");
-                        }
-                    }
-                    _ => {
-                        error!("Invalid command: {}", cmd);
-                    }
                 }
-            }
-        })
-        .map_err(|e| e.to_string())?;
+            })
+            .map_err(|e| e.to_string())?;
+    }
 
     Ok(())
 }
